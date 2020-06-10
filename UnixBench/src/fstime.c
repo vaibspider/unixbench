@@ -40,6 +40,8 @@ char SCCSid[] = "@(#) @(#)fstime.c:3.5 -- 5/15/91 19:30:19";
 #include <unistd.h>
 #include <sys/time.h>
 
+#define ITERATIONS 15000
+
 #define SECONDS 10
 
 #define MAX_BUFSIZE 8192
@@ -51,7 +53,7 @@ char SCCSid[] = "@(#) @(#)fstime.c:3.5 -- 5/15/91 19:30:19";
 #define FNAME0  "dummy0"
 #define FNAME1  "dummy1"
 
-int w_test(int timeSecs);
+int w_test(int timeSecs, int iterations);
 int r_test(int timeSecs);
 int c_test(int timeSecs);
 
@@ -59,6 +61,7 @@ long read_score = 1, write_score = 1, copy_score = 1;
 
 /****************** GLOBALS ***************************/
 
+int iterations = ITERATIONS;
 /* The buffer size for the tests. */
 int bufsize = 1024;
 
@@ -127,6 +130,9 @@ char    *argv[];
                 case 't':
                     seconds = atoi(argv[++i]);
                     break;
+                case 'n':
+                    iterations = atoi(argv[++i]);
+                    break;
                 case 'd':
                     if (chdir(argv[++i]) < 0) {
                         perror("fstime: chdir");
@@ -134,11 +140,11 @@ char    *argv[];
                     }
                     break;
                 default:
-                    fprintf(stderr, "Usage: fstime [-c|-r|-w] [-b <bufsize>] [-m <max_blocks>] [-t <seconds>]\n");
+                    fprintf(stderr, "Usage: fstime [-c|-r|-w] [-n <iterations>] [-b <bufsize>] [-m <max_blocks>] [-t <seconds>]\n");
                     exit(2);
             }
         } else {
-            fprintf(stderr, "Usage: fstime [-c|-r|-w] [-b <bufsize>] [-m <max_blocks>] [-t <seconds>]\n");
+            fprintf(stderr, "Usage: fstime [-c|-r|-w] [-n <iterations>] [-b <bufsize>] [-m <max_blocks>] [-t <seconds>]\n");
             exit(2);
         }
     }
@@ -219,14 +225,14 @@ char    *argv[];
      */
     switch (test) {
     case 'w':
-        status = w_test(seconds);
+        status = w_test(seconds, iterations);
         break;
     case 'r':
-        w_test(2);
+        w_test(2, -1);
         status = r_test(seconds);
         break;
     case 'c':
-        w_test(2);
+        w_test(2, -1);
         r_test(2);
         status = c_test(seconds);
         break;
@@ -256,7 +262,7 @@ static double getFloatTime()
 /*
  * Run the write test for the time given in seconds.
  */
-int w_test(int timeSecs)
+int w_test(int timeSecs, int iterations)
 {
         unsigned long counted = 0L;
         unsigned long tmp;
@@ -273,23 +279,45 @@ int w_test(int timeSecs)
         /* Set an alarm. */
         sigalarm = 0;
         signal(SIGALRM, stop_count);
-        alarm(timeSecs);
+        if (iterations == -1) {
+          alarm(timeSecs);
+        }
 
         start = getFloatTime();
 
-        while (!sigalarm) {
-                for(f_blocks=0; f_blocks < max_buffs; ++f_blocks) {
-                        if ((tmp=write(f, buf, bufsize)) != bufsize) {
-                                if (errno != EINTR) {
-                                        perror("fstime: write");
-                                        return(-1);
-                                }
-                                stop_count();
-                                counted += ((tmp+HALFCOUNT)/COUNTSIZE);
-                        } else
-                                counted += count_per_buf;
-                }
-                lseek(f, 0L, 0); /* rewind */
+        if (iterations == -1) {
+            while (!sigalarm) {
+                    for(f_blocks=0; f_blocks < max_buffs; ++f_blocks) {
+                            if ((tmp=write(f, buf, bufsize)) != bufsize) {
+                                    if (errno != EINTR) {
+                                            perror("fstime: write");
+                                            return(-1);
+                                    }
+                                    stop_count();
+                                    counted += ((tmp+HALFCOUNT)/COUNTSIZE);
+                            } else
+                                    counted += count_per_buf;
+                    }
+                    lseek(f, 0L, 0); /* rewind */
+            }
+        }
+        else {
+            for (int it = 0; it < iterations; it++) {
+                    for(f_blocks=0; f_blocks < max_buffs; ++f_blocks) {
+                            if ((tmp=write(f, buf, bufsize)) != bufsize) {
+                                    if (errno != EINTR) {
+                                            perror("fstime: write");
+                                            return(-1);
+                                    }
+                                    else {
+                                      printf("========EINTR========\n");
+                                    }
+                                    counted += ((tmp+HALFCOUNT)/COUNTSIZE);
+                            } else
+                                    counted += count_per_buf;
+                    }
+                    lseek(f, 0L, 0); /* rewind */
+            }
         }
 
         /* stop clock */

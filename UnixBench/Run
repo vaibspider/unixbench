@@ -79,6 +79,8 @@ my $language = "en_US.utf8";
 # The number of iterations per test.
 my $longIterCount = 10;
 my $shortIterCount = 3;
+# special for fstime-w test
+my $innerIterCount = 15000;
 
 # C compiler to use in compilation tests.
 my $cCompiler = 'gcc';
@@ -918,6 +920,8 @@ sub parseArgs {
             $params->{'verbose'} = 2;
         } elsif ($word eq "-i") {
             $params->{'iterations'} = shift(@words);
+        } elsif ($word eq "-n") {
+            $params->{'inner-iterations'} = shift(@words);
         } elsif ($word eq "-c") {
             if (!defined($params->{'copies'})) {
                 $params->{'copies'} = [ ];
@@ -1332,6 +1336,9 @@ sub runBenchmark {
 
     # Make up the actual benchmark parameters.
     my $params = mergeParams($baseParams, $tparams);
+    if ($bench eq 'fstime-w') {
+        $params->{'options'} = $params->{'options'} . " -n $innerIterCount";
+    }
 
     # Make up the command string based on the parameters.
     my $prog = $params->{'prog'} || $BINDIR . "/" . $bench;
@@ -1888,6 +1895,10 @@ sub main {
         $longIterCount = $params->{'iterations'};
         $shortIterCount = int(($params->{'iterations'} + 1) / 3);
         $shortIterCount = 1 if ($shortIterCount < 1);
+    }
+
+    if ($params->{'inner-iterations'}) {
+      $innerIterCount = $params->{'inner-iterations'};
     }
 
     # If no benchmark units have be specified, do "index".
